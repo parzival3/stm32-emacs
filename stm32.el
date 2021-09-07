@@ -105,46 +105,70 @@
   :group 'stm32
   :type 'string)
 
+(defcustom stm32-flash-util-binary
+  "st-flash"
+  "Utility for flashing stm32 micro."
+  :group 'stm32
+  :type 'string)
 
 (require 'cl-lib)
 (require 'gdb-mi)
 (require 'gud)
 (require 'projectile)
 
+(defun stm32-flash-device ()
+  "Flash stm32 device with st-falsh."
+  (interactive)
+  (let ((binary-file (stm32-get-list-of-binaries ".bin")))
+        (let ((command (concat stm32-flash-util-binary " write " binary-file " 0x8000000")))
+          (with-temp-buffer "*st-flash*")
+                (async-shell-command  command
+                                "*st-flash*"
+                                "*Messages*"))))
+
+(defun stm32-get-list-of-binaries (value)
+  "Prompt user to pick a choice from a list of fimrwares with the given BINARIES-EXTENSION."
+  (let ((choices (directory-files (stm32-get-project-build-dir) 'full (rx-to-string `(and ,@value eos)))))
+    ;; (message "%s" (ivy-completing-read "Select fimrware file:" (mapcar (lambda (x) (last (split-string "/" x))) choices)))))
+    (message "%s" (ivy-completing-read "Select fimrware file:" choices))))
+
 (defun stm32-get-project-root-dir ()
   "Return root path of current project."
-  (if projectile-project-root
-      (let ((dir projectile-project-root))
-	(if (file-exists-p dir)
-	    (progn (message (concat "Project dir: "
-				    dir))
-		   dir)
-	  (progn
-	    (message "No root. Build directory must be /build/")
-	    (message dir)
+  (interactive)
+  (if (projectile-project-root)
+      (let ((dir (projectile-project-root)))
+        (if (file-exists-p dir)
+            (progn (message (concat "Project dir: "
+                                    dir))
+                   dir)
+          (progn
+            (message "No root. Build directory must be /build/")
+            (message dir)
             nil)))))
 
 
 (defun stm32-get-project-build-dir ()
   "Return path to build dir of current project."
+  (interactive)
   (if (stm32-get-project-root-dir)
       (let ((dir (concat
-		  (stm32-get-project-root-dir)
-		  stm32-build-dir)))
-	(if (file-exists-p dir)
-	    (progn (message (concat "Project build dir: "
-				    dir))
-		   dir) ;return dir
+                  (stm32-get-project-root-dir)
+                  stm32-build-dir)))
+        (if (file-exists-p dir)
+            (progn (message (concat "Project build dir: "
+                                    dir))
+                   dir) ;return dir
           (message "No build dir")
           nil))))
 
 (defun stm32-get-project-name ()
+  (interactive)
   "Return path of current project."
   (if (stm32-get-project-root-dir)
       (let* ((pth (substring (stm32-get-project-root-dir) 0 -1))
-	     (name (car (last (split-string pth "/")))))
-	(message (concat "Project name: " name))
-	name)
+             (name (car (last (split-string pth "/")))))
+        (message (concat "Project name: " name))
+        name)
     (message "Wrong root directory")))
 
 (defun stm32-cmake-build (&optional path)
@@ -154,15 +178,15 @@
     (if (not dir)
         (message "No 'build' directory in your project's root. Run stm32-new-project")
       (when (not (file-directory-p dir))
-	(make-directory dir))
+        (make-directory dir))
       (when (file-directory-p dir)
-	(message "cmake project...")
-	(message "and make...")
-	(compile
-	 (concat "cd " dir "; "
+        (message "cmake project...")
+        (message "and make...")
+        (compile
+         (concat "cd " dir "; "
                  stm32-cmd-cmake "; "
                  stm32-cmd-make ";"))
-	(message "ok")))))
+        (message "ok")))))
 
 (defun stm32-make-build (&optional path)
   "Execute make.  Use existing project path's or use optional arg PATH."
@@ -171,36 +195,36 @@
     (if (not dir)
         (message "No 'build' directory in your project's root. Run stm32-new-project")
       (when (not (file-directory-p dir))
-	(make-directory dir))
+        (make-directory dir))
       (when (file-directory-p dir)
-	(message "cmake project...")
-	(message "and make...")
-	(compile
-	 (concat "cd " dir "; " stm32-cmd-make ";"))
-	(message "ok")))))
+        (message "cmake project...")
+        (message "and make...")
+        (compile
+         (concat "cd " dir "; " stm32-cmd-make ";"))
+        (message "ok")))))
 
 ;; (defun stm32-new-project ()
 ;;   "Create new stm32  project from existing code."
 ;;   (interactive)
 ;;   (let* ((fil (read-directory-name "Select STM32CubeMx directory:"))
-;; 	 (nam (car (last (split-string-and-unquote fil "/") 2))))
+;;       (nam (car (last (split-string-and-unquote fil "/") 2))))
 ;;     (when (file-exists-p fil)
 ;;       (when (y-or-n-p (concat "Create project " nam
-;; 			      " in " fil "? "))
-;; 	(progn
-;; 	  (message (concat "copying " stm32-template))
-;; 	  (dolist (x stm32-template-files)
+;;                            " in " fil "? "))
+;;      (progn
+;;        (message (concat "copying " stm32-template))
+;;        (dolist (x stm32-template-files)
 ;;             (let ((path_teml (concat stm32-template x))
 ;;                   (path_prj (concat fil x)))
 ;;               (when (or (not (file-exists-p path_prj))
 ;;                         (y-or-n-p (concat "File " x
-;; 			                  " already exists. Overwrite "
+;;                                        " already exists. Overwrite "
 ;;                                           path_prj " with template? ")))
-;; 	        (progn (copy-file path_teml path_prj t)
+;;              (progn (copy-file path_teml path_prj t)
 ;;                        (message (concat "copied " (concat fil x)))))))
-;; 	  (message (concat "First build " fil stm32-build-dir))
-;; 	  (stm32-cmake-build (concat fil stm32-build-dir)) ;build
-;; 	  (message "done"))))))
+;;        (message (concat "First build " fil stm32-build-dir))
+;;        (stm32-cmake-build (concat fil stm32-build-dir)) ;build
+;;        (message "done"))))))
 
 (defun stm32-run-st-util ()
   "Run st-util gdb server."
@@ -208,31 +232,28 @@
   (let ((p (get-buffer-process "*st-util*")))
     (when p
       (if (y-or-n-p "Kill currently running st-util? ")
-	  (interrupt-process p)
-	(user-error "St-util already running!"))))
+          (interrupt-process p)
+        (user-error "St-util already running!"))))
   (sleep-for 1) ;wait for st-util being killed
   (with-temp-buffer "*st-util*"
-		    
-		    (async-shell-command stm32-st-util-command
-					 "*st-util*"
-					 "*Messages*")
-		    ;;(pop-to-buffer "*st-util*")
-		    ))
+
+                    (async-shell-command stm32-st-util-command
+                                         "*st-util*"
+                                         "*Messages*")
+                    ;;(pop-to-buffer "*st-util*")
+                    ))
 
 (defun stm32-start-gdb ()
   "Strart gud arm-none-eabi-gdb and connect to st-util."
   (interactive)
   (let ((dir (stm32-get-project-build-dir))
-	(name (stm32-get-project-name))
-	(p (get-buffer-process "*st-util*")))
+        (name (stm32-get-list-of-binaries ".elf"))
+        (p (get-buffer-process "*st-util*")))
     (when (not p)
       (stm32-run-st-util))
-    (when dir
-      (let ((pth (concat dir "/" name ".elf")))
-	(when (file-exists-p pth)
-	  (progn
-	    (message pth)
-	    (gdb (concat stm32-gdb-start pth))))))))
+          (progn
+            (message name)
+            (gdb (concat stm32-gdb-start name)))))
 
 
 (defun stm32-flash-to-mcu ()
